@@ -1,170 +1,362 @@
 "use client"
 
-import type React from "react"
 import { useState, useEffect } from "react"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { useToast } from "@/hooks/use-toast"
-
-interface Track {
-  id: string
-  name: string
-  description: string
-  color: string
-}
+import { Users, Crown, Copy, UserMinus, UserCheck, ArrowLeft } from "lucide-react"
 
 interface Team {
-  id?: string
+  id: string
   name: string
   description: string
   status: string
   trackId?: string
-  inviteCode?: string
-}
-
-interface TeamFormProps {
+  inviteCode: string
   eventId: string
-  team?: Team
-  onSuccess?: (team: Team) => void
-  onCancel?: () => void
 }
 
-export default function TeamForm({ eventId, team, onSuccess, onCancel }: TeamFormProps) {
-  const [formData, setFormData] = useState({
-    name: team?.name || "",
-    description: team?.description || "",
-    trackId: team?.trackId || "",
-  })
-  const [tracks, setTracks] = useState<Track[]>([])
-  const [isLoading, setIsLoading] = useState(false)
+interface Member {
+  id: string
+  userId: string
+  isLeader: boolean
+  joinedAt: string
+  user: {
+    id: string
+    name: string
+    email: string
+    avatar?: string
+    skills?: string[]
+  }
+}
+
+interface TeamDetailsProps {
+  team?: Team // 👈 made optional so undefined won’t crash
+  currentUserId?: string
+  onEdit?: () => void
+  onBack?: () => void
+}
+
+export default function TeamDetails({ team, currentUserId, onEdit, onBack }: TeamDetailsProps) {
+  const [members, setMembers] = useState<Member[]>([])
+  const [loading, setLoading] = useState(true)
+  const [joinCode, setJoinCode] = useState("")
+  const [isJoining, setIsJoining] = useState(false)
   const { toast } = useToast()
 
-  useEffect(() => {
-    fetchTracks()
-  }, [eventId])
+  // 🚨 Guard clause: If no team, show fallback
+  if (!team) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <p className="text-lg text-muted-foreground">No team found.</p>
+      </div>
+    )
+  }
 
-  const fetchTracks = async () => {
+  useEffect(() => {
+    fetchTeamDetails()
+  }, [team.id])
+
+  const fetchTeamDetails = async () => {
     try {
-      const response = await fetch(`/api/events/${eventId}/tracks`)
+      const response = await fetch(`/api/teams/${team.id}`)
       const data = await response.json()
       if (response.ok) {
-        setTracks(data.tracks || [])
+        setMembers(data.members || [])
       }
     } catch (error) {
-      console.error("Failed to fetch tracks:", error)
+      console.error("Failed to fetch team details:", error)
+    } finally {
+      setLoading(false)
     }
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setIsLoading(true)
+  const handleJoinTeam = async () => {
+    if (!joinCode.trim()) {
+      toast({
+        title: "Error",
+        description: "Please enter an invite code",
+        variant: "destructive",
+      })
+      return
+    }
 
+    setIsJoining(true)
     try {
-      const url = team?.id ? `/api/teams/${team.id}` : `/api/events/${eventId}/teams`
-      const method = team?.id ? "PUT" : "POST"
-
-      const response = await fetch(url, {
-        method,
+      const response = await fetch("/api/teams/join", {
+        method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(formData),
+        body: JSON.stringify({ inviteCode: joinCode }),
       })
 
       const data = await response.json()
 
-      if (!response.ok) {
-        throw new Error(data.error || "Failed to save team")
+      if (response.ok) {
+        toast({
+          title: "Success!",
+          description: "You have successfully joined the team.",
+        })
+        fetchTeamDetails()
+        setJoinCode("")
+      } else {
+        throw new Error(data.error)
       }
-
-      toast({
-        title: team?.id ? "Team updated!" : "Team created!",
-        description: team?.id ? "Team has been updated successfully." : "Team has been created successfully.",
-      })
-
-      onSuccess?.(data.team)
     } catch (error) {
       toast({
         title: "Error",
-        description: error instanceof Error ? error.message : "Something went wrong",
+        description: error instanceof Error ? error.message : "Failed to join team",
         variant: "destructive",
       })
     } finally {
-      setIsLoading(false)
+      setIsJoining(false)
     }
   }
 
+  const handleRemoveMember = async (memberId: string) => {
+    if (!confirm("Are you sure you want to remove this member?")) return
+
+    try {
+      const response = await fetch(`/api/teams/${team.id}/members/${memberId}`, {
+        method: "DELETE",
+      })
+
+      if (response.ok) {
+        toast({
+          title: "Member removed",
+          description: "Member has been removed from the team.",
+        })
+        fetchTeamDetails()
+      } else {
+        const data = await response.json()
+        throw new Error(data.error)
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to remove member",
+        variant: "destructive",
+      })
+    }
+  }
+
+  const handleToggleLeadership = async (memberId: string, isCurrentlyLeader: boolean) => {
+    try {
+      const response = await fetch(`/api/teams/${team.id}/members/${memberId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isLeader: !isCurrentlyLeader }),
+      })
+
+      if (response.ok) {
+        toast({
+          title: "Role updated",
+          description: `Member ${isCurrentlyLeader ? "removed from" : "promoted to"} leadership.`,
+        })
+        fetchTeamDetails()
+      } else {
+        const data = await response.json()
+        throw new Error(data.error)
+      }
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to update member role",
+        variant: "destructive",
+      })
+    }
+  }
+
+  const copyInviteCode = () => {
+    navigator.clipboard.writeText(team.inviteCode)
+    toast({
+      title: "Copied!",
+      description: "Invite code copied to clipboard.",
+    })
+  }
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case "FORMING":
+        return "bg-yellow-100 text-yellow-800"
+      case "COMPLETE":
+        return "bg-green-100 text-green-800"
+      case "SUBMITTED":
+        return "bg-blue-100 text-blue-800"
+      default:
+        return "bg-gray-100 text-gray-800"
+    }
+  }
+
+  const currentUserMember = members.find((m) => m.userId === currentUserId)
+  const isCurrentUserLeader = currentUserMember?.isLeader || false
+  const isCurrentUserMember = !!currentUserMember
+
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>{team?.id ? "Edit Team" : "Create New Team"}</CardTitle>
-        <CardDescription>
-          {team?.id ? "Update your team details" : "Form a team to participate in this hackathon"}
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div className="space-y-2">
-            <Label htmlFor="name">Team Name</Label>
-            <Input
-              id="name"
-              placeholder="Enter team name"
-              value={formData.name}
-              onChange={(e) => setFormData((prev) => ({ ...prev, name: e.target.value }))}
-              required
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="description">Team Description</Label>
-            <Textarea
-              id="description"
-              placeholder="Describe your team and what you plan to build..."
-              value={formData.description}
-              onChange={(e) => setFormData((prev) => ({ ...prev, description: e.target.value }))}
-              rows={4}
-              required
-            />
-          </div>
-
-          {tracks.length > 0 && (
-            <div className="space-y-2">
-              <Label htmlFor="track">Competition Track</Label>
-              <Select
-                value={formData.trackId}
-                onValueChange={(value) => setFormData((prev) => ({ ...prev, trackId: value }))}
-              >
-                <SelectTrigger>
-                  <SelectValue placeholder="Select a track (optional)" />
-                </SelectTrigger>
-                <SelectContent>
-                  {tracks.map((track) => (
-                    <SelectItem key={track.id} value={track.id}>
-                      <div className="flex items-center gap-2">
-                        <div className="w-3 h-3 rounded-full" style={{ backgroundColor: track.color }} />
-                        {track.name}
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          )}
-
-          <div className="flex gap-4">
-            <Button type="submit" disabled={isLoading} className="flex-1">
-              {isLoading ? "Saving..." : team?.id ? "Update Team" : "Create Team"}
-            </Button>
-            {onCancel && (
-              <Button type="button" variant="outline" onClick={onCancel}>
-                Cancel
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-start justify-between">
+        <div className="flex-1">
+          <div className="flex items-center gap-4 mb-4">
+            {onBack && (
+              <Button variant="ghost" onClick={onBack}>
+                <ArrowLeft className="h-4 w-4 mr-2" />
+                Back
               </Button>
             )}
+            <div>
+              <h1 className="text-3xl font-bold">{team.name}</h1>
+              <div className="flex items-center gap-2 mt-2">
+                <Badge className={getStatusColor(team.status)}>{team.status}</Badge>
+                <div className="flex items-center gap-1 text-muted-foreground">
+                  <Users className="h-4 w-4" />
+                  <span>{members.length} members</span>
+                </div>
+              </div>
+            </div>
           </div>
-        </form>
-      </CardContent>
-    </Card>
+        </div>
+        {isCurrentUserLeader && onEdit && <Button onClick={onEdit}>Edit Team</Button>}
+      </div>
+
+      {/* Team Info */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Team Information</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <p className="text-muted-foreground">{team.description}</p>
+
+          <div className="flex items-center gap-4">
+            <div className="flex-1">
+              <Label>Invite Code</Label>
+              <div className="flex gap-2 mt-1">
+                <Input value={team.inviteCode} readOnly className="font-mono" />
+                <Button variant="outline" size="icon" onClick={copyInviteCode}>
+                  <Copy className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Join Team Section */}
+      {!isCurrentUserMember && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Join This Team</CardTitle>
+            <CardDescription>Enter the invite code to join this team</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="flex gap-2">
+              <Input
+                placeholder="Enter invite code"
+                value={joinCode}
+                onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
+                className="font-mono"
+              />
+              <Button onClick={handleJoinTeam} disabled={isJoining}>
+                {isJoining ? "Joining..." : "Join Team"}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Team Members */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Team Members</CardTitle>
+          <CardDescription>Current team members and their roles</CardDescription>
+        </CardHeader>
+        <CardContent>
+          {loading ? (
+            <div className="space-y-4">
+              {[...Array(3)].map((_, i) => (
+                <div key={i} className="flex items-center gap-4 animate-pulse">
+                  <div className="h-12 w-12 bg-muted rounded-full" />
+                  <div className="flex-1">
+                    <div className="h-4 bg-muted rounded w-1/3 mb-2" />
+                    <div className="h-3 bg-muted rounded w-1/2" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : members.length > 0 ? (
+            <div className="space-y-4">
+              {members.map((member) => (
+                <div key={member.id} className="flex items-center justify-between p-4 border rounded-lg">
+                  <div className="flex items-center gap-4">
+                    <Avatar className="h-12 w-12">
+                      <AvatarImage src={member.user.avatar || "/placeholder.svg"} alt={member.user.name} />
+                      <AvatarFallback>
+                        {member.user.name
+                          .split(" ")
+                          .map((n) => n[0])
+                          .join("")
+                          .toUpperCase()}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-semibold">{member.user.name}</h3>
+                        {member.isLeader && (
+                          <Badge variant="secondary" className="flex items-center gap-1">
+                            <Crown className="h-3 w-3" />
+                            Leader
+                          </Badge>
+                        )}
+                      </div>
+                      <p className="text-sm text-muted-foreground">{member.user.email}</p>
+                      {member.user.skills && member.user.skills.length > 0 && (
+                        <div className="flex flex-wrap gap-1 mt-2">
+                          {member.user.skills.slice(0, 3).map((skill) => (
+                            <Badge key={skill} variant="outline" className="text-xs">
+                              {skill}
+                            </Badge>
+                          ))}
+                          {member.user.skills.length > 3 && (
+                            <Badge variant="outline" className="text-xs">
+                              +{member.user.skills.length - 3}
+                            </Badge>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {isCurrentUserLeader && member.userId !== currentUserId && (
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleToggleLeadership(member.id, member.isLeader)}
+                      >
+                        {member.isLeader ? <UserMinus className="h-4 w-4" /> : <UserCheck className="h-4 w-4" />}
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={() => handleRemoveMember(member.id)}>
+                        <UserMinus className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  )}
+
+                  {member.userId === currentUserId && !member.isLeader && (
+                    <Button size="sm" variant="outline" onClick={() => handleRemoveMember(member.id)}>
+                      Leave Team
+                    </Button>
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-muted-foreground">No members found.</p>
+          )}
+        </CardContent>
+      </Card>
+    </div>
   )
 }
