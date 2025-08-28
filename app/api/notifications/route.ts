@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
 
     const { db } = await connectToDatabase()
 
-    const query: any = { userId: decoded.userId }
+    const query: any = { userId: decoded._id }
     if (unreadOnly) {
       query.isRead = false
     }

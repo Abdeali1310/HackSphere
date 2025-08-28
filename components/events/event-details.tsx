@@ -96,14 +96,19 @@ export function EventDetails({ event, currentUserRole, currentUserId, onEdit, on
   }
 
   const checkRegistrationStatus = async () => {
+    if (!currentUserId) return
     try {
-      // For now, we'll assume the user can register
-      // In a real implementation, you'd check the registrations collection
-      setIsRegistered(false)
+      const res = await fetch(`/api/events/${event.id}/registration-status`)
+      if (!res.ok) throw new Error("Failed to check status")
+      const data = await res.json()
+      setIsRegistered(data.registered)
     } catch (error) {
-      console.error("Failed to check registration:", error)
+      console.error(error)
+      setIsRegistered(false)
     }
   }
+  
+  
 
   const handleRegister = async () => {
     setRegistering(true)
@@ -210,28 +215,31 @@ export function EventDetails({ event, currentUserRole, currentUserId, onEdit, on
           </div>
         </div>
         <div className="flex gap-2">
-          {currentUserRole === "PARTICIPANT" && canRegister && (
-            <>
-              {!isRegistered ? (
-                <Button onClick={handleRegister} disabled={registering}>
-                  <UserPlus className="h-4 w-4 mr-2" />
-                  {registering ? "Registering..." : "Register"}
-                </Button>
-              ) : (
-                <div className="flex gap-2">
-                  <Button asChild>
-                    <a href={`/events/${event.id}/teams`}>
-                      <Users className="h-4 w-4 mr-2" />
-                      View Teams
-                    </a>
-                  </Button>
-                  <Button variant="outline" onClick={handleUnregister}>
-                    Unregister
-                  </Button>
-                </div>
-              )}
-            </>
-          )}
+        {currentUserRole === "PARTICIPANT" && canRegister && (
+  <>
+    {!isRegistered ? (
+      <Button onClick={handleRegister} disabled={registering}>
+        <UserPlus className="h-4 w-4 mr-2" />
+        {registering ? "Registering..." : "Register"}
+      </Button>
+    ) : (
+      <div className="flex gap-2">
+        <Button variant="destructive" disabled>
+          Registered
+        </Button>
+        <Button asChild>
+          <a href={`/events/${event.id}/teams`}>
+            <Users className="h-4 w-4 mr-2" />
+            View Teams
+          </a>
+        </Button>
+        <Button variant="outline" onClick={handleUnregister}>
+          Unregister
+        </Button>
+      </div>
+    )}
+  </>
+)}
           {currentUserRole === "ORGANIZER" && event.organizerId === currentUserId && onEdit && (
             <Button onClick={onEdit}>Edit Event</Button>
           )}

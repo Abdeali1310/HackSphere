@@ -5,10 +5,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Navbar } from "@/components/layout/navbar"
-import { ActivityFeed } from "@/components/communication/activity-feed"
-import { TeamChat } from "@/components/communication/team-chat"
-import { Calendar, Users, Trophy, Plus, FileText, Clock, Eye, MessageCircle } from "lucide-react"
+import { Calendar, Users, Trophy, Plus, FileText, Clock, Eye, MessageCircle, User } from "lucide-react"
 import Link from "next/link"
+import { TeamChat } from "@/components/communication/team-chat"
 
 interface ParticipantStats {
   eventsJoined: number
@@ -35,6 +34,115 @@ interface Team {
   isLeader: boolean
 }
 
+interface Activity {
+  _id: string
+  userId: string
+  eventId: string
+  type: string
+  description: string
+  metadata?: any
+  createdAt: string
+  user?: {
+    name: string
+    avatar?: string
+  }
+}
+
+interface ActivityFeedProps {
+  limit?: number
+  eventId?: string
+}
+
+function ActivityFeed({ limit = 8, eventId }: ActivityFeedProps) {
+  const [activities, setActivities] = useState<Activity[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    fetchActivities()
+  }, [eventId])
+
+  const fetchActivities = async () => {
+    const token = localStorage.getItem("token")
+    if (!token) {
+      setError("No authentication token found.")
+      setLoading(false)
+      return
+    }
+
+    try {
+      const params = new URLSearchParams()
+      if (eventId) params.append("eventId", eventId)
+
+      const res = await fetch(`/api/activities?${params.toString()}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const data = await res.json()
+
+      if (!res.ok) {
+        setError(data.error || "Failed to fetch activities.")
+        setActivities([])
+      } else if (Array.isArray(data)) {
+        setActivities(data.slice(0, limit))
+      } else {
+        setError("Unexpected data format from server.")
+        setActivities([])
+      }
+    } catch (err) {
+      console.error(err)
+      setError("Error fetching activities.")
+      setActivities([])
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const getTypeColor = (type: string) => {
+    switch (type) {
+      case "CREATED":
+        return "bg-blue-100 text-blue-800"
+      case "UPDATED":
+        return "bg-yellow-100 text-yellow-800"
+      case "COMMENTED":
+        return "bg-green-100 text-green-800"
+      default:
+        return "bg-gray-100 text-gray-800"
+    }
+  }
+
+  if (loading) return <div>Loading activities...</div>
+  if (error) return <div className="text-red-500">Error: {error}</div>
+  if (activities.length === 0)
+    return (
+      <div className="text-center py-8">
+        <Calendar className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+        <p className="text-muted-foreground">No activities yet</p>
+      </div>
+    )
+
+  return (
+    <div className="space-y-3">
+      {activities.map((activity) => (
+        <Card key={activity._id}>
+          <CardHeader className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <User className="w-5 h-5 text-muted-foreground" />
+              <div>
+                <p className="text-sm font-medium">{activity.user?.name || "Unknown User"}</p>
+                <p className="text-xs text-muted-foreground">{new Date(activity.createdAt).toLocaleString()}</p>
+              </div>
+            </div>
+            <Badge className={`${getTypeColor(activity.type)} text-xs`}>{activity.type}</Badge>
+          </CardHeader>
+          <CardContent>
+            <p className="text-sm">{activity.description}</p>
+          </CardContent>
+        </Card>
+      ))}
+    </div>
+  )
+}
+
 export default function ParticipantDashboard() {
   const [stats, setStats] = useState<ParticipantStats>({
     eventsJoined: 0,
@@ -46,41 +154,60 @@ export default function ParticipantDashboard() {
   const [myTeams, setMyTeams] = useState<Team[]>([])
   const [selectedTeam, setSelectedTeam] = useState<Team | null>(null)
   const [loading, setLoading] = useState(true)
-
+  const [error,setError] = useState("");
+  const [upcomingEvents, setUpcomingEvents] = useState<any[]>([])
   useEffect(() => {
     fetchDashboardData()
   }, [])
 
   const fetchDashboardData = async () => {
+    setLoading(true)
+    setError("")
+  
     try {
       const token = localStorage.getItem("token")
-      const [eventsRes, teamsRes] = await Promise.all([
-        fetch("/api/events?registered=true", { headers: { Authorization: `Bearer ${token}` } }),
-        fetch("/api/teams?my=true", { headers: { Authorization: `Bearer ${token}` } }),
-      ])
-
-      const events = await eventsRes.json()
-      const teams = await teamsRes.json()
-
+      if (!token) {
+        setError("No authentication token found.")
+        setLoading(false)
+        return
+      }
+  
+      // Fetch events
+      const eventsRes = await fetch(`/api/events?page=1&limit=10`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const eventsData = await eventsRes.json()
+  
+      // Fetch teams
+      const teamsRes = await fetch(`/api/teams?page=1&limit=10`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const teamsData = await teamsRes.json()
+  
+      if (!eventsRes.ok || !teamsRes.ok) {
+        console.error("Error fetching dashboard data", { eventsData, teamsData })
+        setError("Failed to fetch dashboard data.")
+        return
+      }
+  
+      const events = Array.isArray(eventsData.events) ? eventsData.events : []
+      const teams = Array.isArray(teamsData.teams) ? teamsData.teams : []
+  
       setMyEvents(events.slice(0, 5))
       setMyTeams(teams.slice(0, 5))
-
+  
       const upcomingEvents = events.filter(
-        (e: Event) => new Date(e.startDate) > new Date() && e.status === "PUBLISHED",
-      ).length
-
-      setStats({
-        eventsJoined: events.length,
-        teamsJoined: teams.length,
-        submissionsMade: teams.filter((t: Team) => t.status === "SUBMITTED").length,
-        upcomingEvents,
-      })
-    } catch (error) {
-      console.error("Error fetching dashboard data:", error)
+        (event) => new Date(event.startDate) > new Date()
+      )
+      setUpcomingEvents(upcomingEvents)
+    } catch (err) {
+      console.error("Error fetching dashboard data", err)
+      setError("Error fetching dashboard data.")
     } finally {
       setLoading(false)
     }
   }
+  
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -101,7 +228,7 @@ export default function ParticipantDashboard() {
     }
   }
 
-  if (loading) {
+  if (loading)
     return (
       <div>
         <Navbar />
@@ -110,12 +237,10 @@ export default function ParticipantDashboard() {
         </div>
       </div>
     )
-  }
 
   return (
     <div className="min-h-screen bg-background">
       <Navbar />
-
       <div className="container mx-auto px-4 py-8">
         <div className="mb-8">
           <h1 className="text-3xl font-bold mb-2">Participant Dashboard</h1>
@@ -171,6 +296,7 @@ export default function ParticipantDashboard() {
           </Card>
         </div>
 
+        {/* Events, Teams & Activity/Chat */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* My Events */}
           <div>
@@ -262,7 +388,7 @@ export default function ParticipantDashboard() {
             </Card>
           </div>
 
-          {/* Team Chat or Activity Feed */}
+          {/* Team Chat / Activity Feed */}
           <div>
             {selectedTeam ? (
               <div>
@@ -276,43 +402,42 @@ export default function ParticipantDashboard() {
             )}
           </div>
         </div>
-
         {/* Quick Actions */}
-        <div className="mt-8">
-          <Card>
-            <CardHeader>
-              <CardTitle>Quick Actions</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <Button variant="outline" className="h-20 flex-col bg-transparent" asChild>
-                  <Link href="/events">
-                    <Calendar className="w-6 h-6 mb-2" />
-                    Browse Events
-                  </Link>
-                </Button>
-                <Button variant="outline" className="h-20 flex-col bg-transparent" asChild>
-                  <Link href="/teams/team-list">
-                    <Users className="w-6 h-6 mb-2" />
-                    Find Teams
-                  </Link>
-                </Button>
-                <Button variant="outline" className="h-20 flex-col bg-transparent" asChild>
-                  <Link href="/profile">
-                    <FileText className="w-6 h-6 mb-2" />
-                    My Profile
-                  </Link>
-                </Button>
-                <Button variant="outline" className="h-20 flex-col bg-transparent" asChild>
-                  <Link href="/events?upcoming=true">
-                    <Clock className="w-6 h-6 mb-2" />
-                    Upcoming
-                  </Link>
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+<div className="mt-8">
+<Card>
+  <CardHeader>
+    <CardTitle>Quick Actions</CardTitle>
+  </CardHeader>
+  <CardContent>
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <Button variant="outline" className="h-20 flex-col bg-transparent" asChild>
+        <Link href="/events">
+          <Calendar className="w-6 h-6 mb-2" />
+          Browse Events
+        </Link>
+      </Button>
+      <Button variant="outline" className="h-20 flex-col bg-transparent" asChild>
+        <Link href="/teams/team-list">
+          <Users className="w-6 h-6 mb-2" />
+          Find Teams
+        </Link>
+      </Button>
+      <Button variant="outline" className="h-20 flex-col bg-transparent" asChild>
+        <Link href="/profile">
+          <FileText className="w-6 h-6 mb-2" />
+          My Profile
+        </Link>
+      </Button>
+      <Button variant="outline" className="h-20 flex-col bg-transparent" asChild>
+        <Link href="/events?upcoming=true">
+          <Clock className="w-6 h-6 mb-2" />
+          Upcoming
+        </Link>
+      </Button>
+    </div>
+  </CardContent>
+</Card>
+</div>
       </div>
     </div>
   )

@@ -14,18 +14,20 @@ export async function GET(request: NextRequest) {
     const db = await getDatabase()
     const events = db.collection<Event>("events")
 
-    // Build query
     const query: any = {}
-    if (status && ["DRAFT", "PUBLISHED", "ONGOING", "COMPLETED", "CANCELLED"].includes(status)) {
+    if (status && ["DRAFT","PUBLISHED","ONGOING","COMPLETED","CANCELLED"].includes(status)) {
       query.status = status
     }
-    if (organizerId) {
-      query.organizerId = organizerId
-    }
+    if (organizerId) query.organizerId = organizerId
 
     const skip = (page - 1) * limit
     const totalEvents = await events.countDocuments(query)
-    const eventList = await events.find(query).skip(skip).limit(limit).sort({ createdAt: -1 }).toArray()
+    const eventList = await events
+      .find(query)
+      .skip(skip)
+      .limit(limit)
+      .sort({ createdAt: -1 })
+      .toArray()
 
     const eventsWithId = eventList.map((event) => ({
       ...event,
@@ -54,8 +56,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const { title, description, theme, startDate, endDate, maxTeamSize, minTeamSize, banner, website } =
-      await request.json()
+    const { title, description, theme, startDate, endDate, maxTeamSize, minTeamSize, banner, website } = await request.json()
 
     if (!title || !description || !theme || !startDate || !endDate || !maxTeamSize || !minTeamSize) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 })

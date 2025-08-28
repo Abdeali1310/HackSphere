@@ -41,15 +41,20 @@ export function NotificationsDropdown() {
         headers: { Authorization: `Bearer ${token}` },
       })
       const data = await response.json()
-      setNotifications(data)
-      setUnreadCount(data.filter((n: Notification) => !n.isRead).length)
+      if (Array.isArray(data)) {
+        setNotifications(data)
+        setUnreadCount(data.filter((n: Notification) => !n.isRead).length)
+      } else {
+        setNotifications([])
+        setUnreadCount(0)
+      }
     } catch (error) {
       console.error("Error fetching notifications:", error)
     } finally {
       setLoading(false)
     }
   }
-
+  
   const markAsRead = async (notificationIds: string[]) => {
     try {
       const token = localStorage.getItem("token")

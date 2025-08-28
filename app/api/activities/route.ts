@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { connectToDatabase } from "@/lib/mongodb"
 import { verifyToken } from "@/lib/auth"
+import { ObjectId } from "mongodb"
 
 export async function GET(request: NextRequest) {
   try {
@@ -8,6 +9,9 @@ export async function GET(request: NextRequest) {
     if (!token) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
+
+    // ✅ Verify token
+    verifyToken(token)
 
     const { searchParams } = new URL(request.url)
     const eventId = searchParams.get("eventId")
@@ -19,12 +23,26 @@ export async function GET(request: NextRequest) {
       query.eventId = eventId
     }
 
-    const activities = await db.collection("activities").find(query).sort({ createdAt: -1 }).limit(20).toArray()
+    const activities = await db
+      .collection("activities")
+      .find(query)
+      .sort({ createdAt: -1 })
+      .limit(20)
+      .toArray()
 
     // Populate user information
     const activitiesWithUsers = await Promise.all(
       activities.map(async (activity) => {
-        const user = await db.collection("users").findOne({ _id: activity.userId })
+        let user = null
+
+        try {
+          // Try finding by ObjectId
+          user = await db.collection("users").findOne({ _id: new ObjectId(activity.userId) })
+        } catch {
+          // fallback: maybe userId is already a string
+          user = await db.collection("users").findOne({ _id: activity.userId })
+        }
+
         return {
           ...activity,
           user: user ? { name: user.name, avatar: user.avatar } : null,
@@ -39,6 +57,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
+
 export async function POST(request: NextRequest) {
   try {
     const token = request.headers.get("authorization")?.replace("Bearer ", "")
@@ -46,9 +65,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const decoded = verifyToken(token)
-    const { eventId, type, description, metadata } = await request.json()
+    const decoded = verifyToken(token) // ✅ Verify token
 
+    const { eventId, type, description, metadata } = await request.json()
     const { db } = await connectToDatabase()
 
     const activity = {

@@ -113,12 +113,12 @@ export function TeamChat({ teamId, teamName }: TeamChatProps) {
             messages.map((message) => (
               <div key={message._id} className="flex gap-3">
                 <Avatar className="w-8 h-8">
-                  <AvatarImage src={message.sender.avatar || "/placeholder.svg"} />
-                  <AvatarFallback>{message.sender.name.charAt(0)}</AvatarFallback>
+                  <AvatarImage src={message.sender?.avatar || "/placeholder.svg"} />
+                  <AvatarFallback>{message.sender?.name.charAt(0)}</AvatarFallback>
                 </Avatar>
                 <div className="flex-1">
                   <div className="flex items-center gap-2 mb-1">
-                    <span className="font-medium text-sm">{message.sender.name}</span>
+                    <span className="font-medium text-sm">{message.sender?.name}</span>
                     <span className="text-xs text-muted-foreground">
                       {formatDistanceToNow(new Date(message.createdAt), { addSuffix: true })}
                     </span>
