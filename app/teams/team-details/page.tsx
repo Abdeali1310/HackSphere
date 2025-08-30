@@ -39,7 +39,7 @@ export default function TeamDetails({ team, currentUserId, onEdit, onBack }: Tea
 
   useEffect(() => {
     fetchTeamDetails()
-  }, [team.id])
+  }, [])
 
   const fetchTeamDetails = async () => {
     try {

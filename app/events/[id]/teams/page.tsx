@@ -1,8 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
-
-// import TeamForm from "./team-form/page"
+import { use, useState, useEffect } from "react"
 import TeamDetails from "@/app/teams/team-form/page"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
@@ -36,7 +34,10 @@ interface Team {
   eventId: string
 }
 
-export default function EventTeamsPage({ params }: { params: { id: string } }) {
+export default function EventTeamsPage({ params }: { params: Promise<{ id: string }> }) {
+  // ✅ unwrap params with React.use
+  const { id } = use(params)
+
   const [currentUser, setCurrentUser] = useState<User | null>(null)
   const [event, setEvent] = useState<Event | null>(null)
   const [selectedTeam, setSelectedTeam] = useState<Team | null>(null)
@@ -51,20 +52,19 @@ export default function EventTeamsPage({ params }: { params: { id: string } }) {
 
   useEffect(() => {
     fetchInitialData()
-  }, [params.id])
+  }, [id]) // use unwrapped id here
 
   const fetchInitialData = async () => {
     try {
       const [userRes, eventRes] = await Promise.all([
         fetch("/api/users/profile"),
-        fetch(`/api/events/${params.id}`)
+        fetch(`/api/events/${id}`)
       ])
       const [userData, eventData] = await Promise.all([userRes.json(), eventRes.json()])
 
       if (userRes.ok) setCurrentUser(userData.user)
       if (eventRes.ok) setEvent(eventData.event)
 
-      // Check registration status
       if (userRes.ok) checkRegistrationStatus(userData.user.id)
     } catch (error) {
       console.error("Failed to fetch initial data:", error)
@@ -75,7 +75,7 @@ export default function EventTeamsPage({ params }: { params: { id: string } }) {
 
   const checkRegistrationStatus = async (userId: string) => {
     try {
-      const res = await fetch(`/api/events/${params.id}/registration-status`)
+      const res = await fetch(`/api/events/${id}/registration-status`)
       const data = await res.json()
       setIsRegistered(data.registered)
     } catch (error) {
@@ -85,7 +85,7 @@ export default function EventTeamsPage({ params }: { params: { id: string } }) {
 
   const handleRegisterForEvent = async () => {
     try {
-      const response = await fetch(`/api/events/${params.id}/register`, { method: "POST" })
+      const response = await fetch(`/api/events/${id}/register`, { method: "POST" })
       if (response.ok) {
         toast({ title: "Registered!", description: "You have successfully registered." })
         setIsRegistered(true)
@@ -94,7 +94,11 @@ export default function EventTeamsPage({ params }: { params: { id: string } }) {
         throw new Error(data.error)
       }
     } catch (error) {
-      toast({ title: "Error", description: error instanceof Error ? error.message : "Failed to register", variant: "destructive" })
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to register",
+        variant: "destructive",
+      })
     }
   }
 
@@ -121,7 +125,11 @@ export default function EventTeamsPage({ params }: { params: { id: string } }) {
         throw new Error(data.error)
       }
     } catch (error) {
-      toast({ title: "Error", description: error instanceof Error ? error.message : "Failed to join team", variant: "destructive" })
+      toast({
+        title: "Error",
+        description: error instanceof Error ? error.message : "Failed to join team",
+        variant: "destructive",
+      })
     } finally {
       setIsJoining(false)
     }
@@ -161,9 +169,8 @@ export default function EventTeamsPage({ params }: { params: { id: string } }) {
   return (
     <div className="container mx-auto px-4 py-8 max-w-6xl">
       {showCreateForm || editingTeam ? (
-        
         <TeamForm
-          eventId={params.id}
+          eventId={id}
           team={editingTeam || undefined}
           onSuccess={handleTeamSuccess}
           onCancel={() => {
@@ -222,7 +229,7 @@ export default function EventTeamsPage({ params }: { params: { id: string } }) {
           )}
 
           <TeamList
-            eventId={params.id}
+            eventId={id}
             currentUserId={currentUser?.id}
             onTeamSelect={setSelectedTeam}
             onTeamEdit={handleTeamEdit}
