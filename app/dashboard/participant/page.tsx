@@ -160,6 +160,66 @@ export default function ParticipantDashboard() {
     fetchDashboardData()
   }, [])
 
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        const token = localStorage.getItem("token")
+  
+        // fetch all events
+        const eventsRes = await fetch(`/api/events?page=1&limit=10`, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        const eventsData = await eventsRes.json()
+        console.log("Events:", eventsData)
+  
+        // fetch registrations for this user
+        const regRes = await fetch(`/api/registrations/me`, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        const registrations = await regRes.json()
+        console.log("Registrations:", registrations)
+  
+        // fetch teams where this user is a member
+        const teamsRes = await fetch(`/api/teams/me`, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        const teams = await teamsRes.json()
+        console.log("Teams:", teams)
+  
+        // fetch submissions done by this user’s teams
+        const subRes = await fetch(`/api/submissions/me`, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        const submissions = await subRes.json()
+        console.log("Submissions:", submissions)
+  
+        // 🔑 ensure eventsData is an array
+        const eventsArray = Array.isArray(eventsData)
+          ? eventsData
+          : eventsData.events || []
+  
+        // derive stats
+        const eventsJoined = registrations.length
+        const teamsJoined = teams.length
+        const submissionsMade = submissions.length
+        const upcomingEvents = eventsArray.filter(
+          (e: any) => e.status === "PUBLISHED"
+        ).length
+  
+        setStats({
+          eventsJoined,
+          teamsJoined,
+          submissionsMade,
+          upcomingEvents,
+        })
+      } catch (err) {
+        console.error("Error fetching stats", err)
+      }
+    }
+  
+    fetchStats()
+  }, [])
+  
   const fetchDashboardData = async () => {
     setLoading(true)
     setError("")
@@ -177,7 +237,9 @@ export default function ParticipantDashboard() {
         headers: { Authorization: `Bearer ${token}` },
       })
       const eventsData = await eventsRes.json()
-  
+      console.log(eventsData);
+      
+      
       // Fetch teams
       const teamsRes = await fetch(`/api/teams?page=1&limit=10`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -248,7 +310,7 @@ export default function ParticipantDashboard() {
         </div>
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Events Joined</CardTitle>
@@ -271,16 +333,7 @@ export default function ParticipantDashboard() {
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Submissions Made</CardTitle>
-              <FileText className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stats.submissionsMade}</div>
-              <p className="text-xs text-muted-foreground">Projects submitted</p>
-            </CardContent>
-          </Card>
+          
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -302,7 +355,7 @@ export default function ParticipantDashboard() {
           <div>
             <Card>
               <CardHeader className="flex flex-row items-center justify-between">
-                <CardTitle>My Events</CardTitle>
+                <CardTitle>Events</CardTitle>
                 <Button variant="outline" size="sm" asChild>
                   <Link href="/events">
                     <Plus className="w-4 h-4 mr-2" />

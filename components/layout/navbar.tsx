@@ -96,15 +96,7 @@ export function Navbar() {
                   <Calendar className="w-4 h-4" />
                   Events
                 </Link>
-                {user.role === "PARTICIPANT" && (
-                  <Link
-                    href="/teams"
-                    className="flex items-center gap-2 text-sm font-medium hover:text-primary transition-colors"
-                  >
-                    <Users className="w-4 h-4" />
-                    Teams
-                  </Link>
-                )}
+                
                 {user.role === "ORGANIZER" && (
                   <Link
                     href="/users"
